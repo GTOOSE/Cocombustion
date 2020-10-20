@@ -77,19 +77,15 @@ for i in range(durée):
     
     #GES
     if i <5:
-        model.addConstr(quicksum(ges[c]*C[c,i] for c in combustible)<=800000 )
-        Quota.append(800000-quicksum(ges[c]*C[c,i] for c in combustible))
-        
+        Quota.append(80000-quicksum(ges[c]*C[c,i] for c in combustible))
     elif i >=5 and i <10:
-        model.addConstr(quicksum(ges[c]*C[c,i] for c in combustible)<=600000) 
-        Quota.append(600000-quicksum(ges[c]*C[c,i] for c in combustible))
-                         
+        Quota.append(60000-quicksum(ges[c]*C[c,i] for c in combustible))
     elif i >=10 and i <15:
-        model.addConstr(quicksum(ges[c]*C[c,i] for c in combustible)<=400000)
-        Quota.append(400000-quicksum(ges[c]*C[c,i] for c in combustible)     )                                                             
+        Quota.append(40000-quicksum(ges[c]*C[c,i] for c in combustible))                                                             
     elif i >=15 :
-        model.addConstr(quicksum(ges[c]*C[c,i] for c in combustible)<=200000 )
-        Quota.append(200000-quicksum(ges[c]*C[c,i] for c in combustible))
+        Quota.append(20000-quicksum(ges[c]*C[c,i] for c in combustible))
+        #rajouter variabile binaire pour si pas de benef on le fait pas 
+    
 
 model.setObjective(sum(5*Quota[i] for i in range(20))+quicksum(profit(c)*C[c,i] for c in combustible for i in range(20))- CF - stock*invest,GRB.MAXIMIZE)
 
@@ -103,6 +99,4 @@ print(f"Sur 20 ans le bénéfice est de : {Opti:.0f} euros")
 
 for c in combustible:
     print(c, int((sum(C[c,i].x for i in range(20)))/1000),"Kt")
-
-
-
+    
