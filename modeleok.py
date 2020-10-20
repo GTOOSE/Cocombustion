@@ -63,7 +63,8 @@ C = model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
         
 
 stock = model.addVar (lb = 0, vtype = GRB.BINARY)   
-investment = model.addVar (lb = 0, vtype = GRB.CONTINUOUS)
+#Vaut 1 si le carbone devient un bénéfice, 0 sinon. Inséré dans objectif
+quot = model.addVar (lb = 0, vtype = GRB.BINARY)
 
 for i in range(durée):
     #Assure la production énergétique pour chaque année i
@@ -87,7 +88,7 @@ for i in range(durée):
         #rajouter variabile binaire pour si pas de benef on le fait pas 
     
 
-model.setObjective(sum(5*Quota[i] for i in range(20))+quicksum(profit(c)*C[c,i] for c in combustible for i in range(20))- CF - stock*invest,GRB.MAXIMIZE)
+model.setObjective(quot*sum(5*Quota[i] for i in range(20))+quicksum(profit(c)*C[c,i] for c in combustible for i in range(20))- CF - stock*invest,GRB.MAXIMIZE)
 
 model.optimize()
 
@@ -99,4 +100,20 @@ print(f"Sur 20 ans le bénéfice est de : {Opti:.0f} euros")
 
 for c in combustible:
     print(c, int((sum(C[c,i].x for i in range(20)))/1000),"Kt")
-    
+
+quota=[]    
+for i in range(20):
+    if i <5:
+        quota.append(80000-quicksum(ges[c]*C[c,i].x for c in combustible))
+    elif i >=5 and i <10:
+        quota.append(60000-quicksum(ges[c]*C[c,i].x for c in combustible))
+    elif i >=10 and i <15:
+        quota.append(40000-quicksum(ges[c]*C[c,i].x for c in combustible))                                                             
+    elif i >=15 :
+        quota.append(20000-quicksum(ges[c]*C[c,i].x for c in combustible))
+        #rajouter variabile binaire pour si pas de benef on le fait pas 
+s=0
+for i in quota:
+    s=s+i
+print(LinExpr.getValue(s))
+print(quot)
