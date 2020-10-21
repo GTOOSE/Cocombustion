@@ -65,6 +65,10 @@ C = model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
 stock = model.addVar (lb = 0, vtype = GRB.BINARY)   
 #Vaut 1 si le carbone devient un bénéfice, 0 sinon. Inséré dans objectif
 quot = model.addVar (lb = 0, vtype = GRB.BINARY)
+#Vaut 1 si le carbone devient un bénéfice, 0 sinon. Inséré dans objectif
+quot = model.addVar (lb = 0, vtype = GRB.BINARY)
+#Vaut 1 si le carbone devient un bénéfice, 0 sinon. Inséré dans objectif
+sech = model.addVar (lb = 0, vtype = GRB.BINARY)
 
 for i in range(durée):
     #Assure la production énergétique pour chaque année i
@@ -86,9 +90,16 @@ for i in range(durée):
     elif i >=15 :
         Quota.append(20000-quicksum(ges[c]*C[c,i] for c in combustible))
         #rajouter variabile binaire pour si pas de benef on le fait pas 
-    
+        
+#forumule de bénef avec le sechage 
+pcibf2 = 8-21*0.05
+pcirv2 = 8 - 21*0.05
 
-model.setObjective(quot*sum(5*Quota[i] for i in range(20))+quicksum(profit(c)*C[c,i] for c in combustible for i in range(20))- CF - stock*invest,GRB.MAXIMIZE)
+benef1 = (sum(pci[c]*eff*vente[c] - achat[c] for c in boisfrais)+(sum(pci[c]*eff*vente[c] - achat[c] for c in residuvert)))
+benef2 = ((sum(pcibf2*eff*vente[c] - achat[c] for c in boisfrais))+(sum(pcirv2*eff*vente[c] - achat[c] for c in residuvert)))     
+sechage=300000
+
+model.setObjective(sech*(benef2-(benef1+sechage))+quot*sum(5*Quota[i] for i in range(20))+quicksum(profit(c)*C[c,i] for c in combustible for i in range(20))- CF - stock*invest,GRB.MAXIMIZE)
 
 model.optimize()
 
@@ -117,3 +128,4 @@ for i in quota:
     s=s+i
 print(LinExpr.getValue(s))
 print(quot)
+print(sech)
