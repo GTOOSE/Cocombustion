@@ -2,15 +2,23 @@
 
 from gurobipy import *
 
+
+model = Model('COCOmbustion')
+model.modelSense = GRB.MAXIMIZE
+#Vaut 1 si le carbone devient un bénéfice, 0 sinon. Inséré dans objectif
+s1 = model.addVar (lb = 0, vtype = GRB.BINARY)
+s2 = model.addVar (lb = 0, vtype = GRB.BINARY)
+s3 = model.addVar (lb = 0, vtype = GRB.BINARY)
+
 CF = 10050000        #cout fixe en euros O&M liés à la capacité de la centrale
 eff = 0.38            #efficacité énergétique
 prod = 990000/eff
 ratiocmin = 0.1      # ratio carbone dans le LFC
 durée = 20
 Quota=[]
-pcibf = 8-21*0.2
-pcirv = 8 - 21*0.4
-pcibr = 8 - 21*0.05
+pcibr = 18-21*0.2
+pcibf = (s1*18-21*0.05+s2*18-21*0.05+s3*18-21*0.4)
+pcirv = (s1*18-21*0.05+s2*18-21*0.05+s3*18-21*0.2)
 invest = 50000
 
 combustible, pci, achat, vente, dispo1, dispo2, ges = multidict({
@@ -55,9 +63,6 @@ def dispo_bio (provenance, année):
     return dispo [provenance] if année <= 5 else dispo2 [provenance]
 
 
-model = Model('COCOmbustion')
-model.modelSense = GRB.MAXIMIZE
-
 C = model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
 
         
@@ -67,8 +72,7 @@ stock = model.addVar (lb = 0, vtype = GRB.BINARY)
 quot = model.addVar (lb = 0, vtype = GRB.BINARY)
 #Vaut 1 si le carbone devient un bénéfice, 0 sinon. Inséré dans objectif
 quot = model.addVar (lb = 0, vtype = GRB.BINARY)
-#Vaut 1 si le carbone devient un bénéfice, 0 sinon. Inséré dans objectif
-sech = model.addVar (lb = 0, vtype = GRB.BINARY)
+
 
 for i in range(durée):
     #Assure la production énergétique pour chaque année i
@@ -79,6 +83,11 @@ for i in range(durée):
     
     #Assure le stockage pour chaque jour i/365
     model.addConstr((sum(C[c,i] for c in boisrecycle))+(sum(C[c,i] for c in boistorrefie)) + (sum(C[c,i] for c in residuvert)) <= 1500*365*(1+stock))
+    
+    #contrainte sur les masse de biomasse pour le sechage 
+    model.addConstr((s1*(sum(C[c,i] for c in residuvert))+(sum(C[c,i] for c in boisfrais))) <= 50000)
+    model.addConstr((s2*(sum(C[c,i] for c in residuvert))+(sum(C[c,i] for c in boisfrais))) <= 150000)
+    model.addConstr(s1 + s2 +s3 == 1)
     
     #GES
     if i <5:
@@ -92,14 +101,11 @@ for i in range(durée):
         #rajouter variabile binaire pour si pas de benef on le fait pas 
         
 #forumule de bénef avec le sechage 
-pcibf2 = 8-21*0.05
-pcirv2 = 8 - 21*0.05
+sechage1=s1*300000
+sechage2=s2*600000
+sechage3=s3*0
 
-benef1 = (sum(pci[c]*eff*vente[c] - achat[c] for c in boisfrais)+(sum(pci[c]*eff*vente[c] - achat[c] for c in residuvert)))
-benef2 = ((sum(pcibf2*eff*vente[c] - achat[c] for c in boisfrais))+(sum(pcirv2*eff*vente[c] - achat[c] for c in residuvert)))     
-sechage=300000
-
-model.setObjective(sech*(benef2-(benef1+sechage))+quot*sum(5*Quota[i] for i in range(20))+quicksum(profit(c)*C[c,i] for c in combustible for i in range(20))- CF - stock*invest,GRB.MAXIMIZE)
+model.setObjective(-(sechage1+sechage2+sechage3)+quot*sum(5*Quota[i] for i in range(20))+quicksum(profit(c)*C[c,i] for c in combustible for i in range(20))- CF - stock*invest,GRB.MAXIMIZE)
 
 model.optimize()
 
@@ -126,6 +132,11 @@ for i in range(20):
 s=0
 for i in quota:
     s=s+i
-print(LinExpr.getValue(s))
-print(quot)
-print(sech)
+print('valeur de quota', LinExpr.getValue(s))
+print('quot : variable de prise en compte quota carbone', quot.x)
+
+print('sechage : ', LinExpr.getValue(sechage1)+LinExpr.getValue(sechage2)+LinExpr.getValue(sechage3))
+print('s1 : ', s1.x)
+print('s2 : ', s2.x)
+print('s3 : ', s3.x)
+print(LinExpr.getValue(pcibf))
