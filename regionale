@@ -5,6 +5,9 @@ eff = 0.38            #efficacité énergétique
 prod = 990000/eff
 ratiocmin = 0.1      # ratio carbone dans le LFC
 durée = 20
+pcibf = 1-21*0.4
+pcibt = 1
+pcibr=1
 
 
 Couts_Var = ['CV1', 'CV2']
@@ -35,7 +38,7 @@ combustible, pci, achat, vente, dispo1, dispo2, ges, route, mer = multidict({
         'rv3' : [25/3.6,115,43.2,GRB.INFINITY,30000,0.0001, 30, 0],
         'rv4' : [25/3.6,115,43.2,GRB.INFINITY,30000,0.0001, 50, 0],
         'rv5' : [25/3.6,115,43.2,GRB.INFINITY,30000,0.0001, 80, 0],
-        'br': [pcibr/3.6,12,115,85000,240000,0.0001, 0, 0]
+        'br': [pcibr/3.6,12,115,85000,240000,0.0001, 4000, 40000]
 })
 
 
@@ -45,7 +48,10 @@ charbon = ['charbon']
 boistorrefie = ['Caroline-du-Sud','Brésil','Québec','Canada Pacifique','Portugal','Russie']
 residuvert =['rv1','rv2','rv3','rv4','rv5']
 boisfrais_sec=['MAseche']
-biomasse = ['boistorréfié', 'residuvert', 'boisfrais']
+biomasse = ['MA','Cévennes30','Cévennes48','Cévennes07','br','Caroline-du-Sud','Brésil','Québec','Canada Pacifique','Portugal','Russie','rv1','rv2','rv3','rv4','rv5']
+
+
+
 def profit(c):
     return pci[c]*eff*vente[c] - achat[c]
 
@@ -68,6 +74,7 @@ R = model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
 
 stock = model.addVar (lb = 0, vtype = GRB.BINARY)   
 investment = model.addVar (lb = 0, vtype = GRB.CONTINUOUS)
+perimetre = model.addVars (20,lb = 0, vtype = GRB.BINARY)   
 
 #variables incorporation biomasse
 X1=model.addVar(vtype=GRB.BINARY)
@@ -93,22 +100,20 @@ for i in range(durée):
     model.addConstr(quicksum(pci[c]*C[c,i] for c in combustible) == prod)
     
     #Assure les 10% de charbon pour chaque année i 
-    model.addConstr((1-ratiocmin)*(sum(C[c,i] for c in charbon))-ratiocmin*(sum(C[c,i] for c in boisfrais)+sum(C[c,i] for c in boisrecycle)+sum(C[c,i] for c in boistorrefie)+sum(C[c,i] for c in residuvert)+sum(C[c,i] for c in boisfrais_sec))  >= 0)
+    #model.addConstr((1-ratiocmin)*(sum(C[c,i] for c in charbon))-ratiocmin*(sum(C[c,i] for c in boisfrais)+sum(C[c,i] for c in boisrecycle)+sum(C[c,i] for c in boistorrefie)+sum(C[c,i] for c in residuvert)+sum(C[c,i] for c in boisfrais_sec))  >= 0)
     
     #Assure le stockage pour chaque jour i/365
-    model.addConstr((sum(C[c,i] for c in boisrecycle))+(sum(C[c,i] for c in boistorrefie)) + (sum(C[c,i] for c in residuvert)+(sum(C[c,i] for c in boisfrais_sec))) <= 1500*365*(1+stock))
+    #model.addConstr((sum(C[c,i] for c in boisrecycle))+(sum(C[c,i] for c in boistorrefie)) + (sum(C[c,i] for c in residuvert)+(sum(C[c,i] for c in boisfrais_sec))) <= 1500*365*(1+stock))
     
     #Conditionne les couts variables de biomasse
-    model.addConstr(0.5*sum(C[c,i] for c in combustible)>=sum(C[c,i] for c in combustible)-C['charbon',i]-300000000*X1)
+    #model.addConstr(0.5*sum(C[c,i] for c in combustible)>=sum(C[c,i] for c in combustible)-C['charbon',i]-300000000*X1)
     
     for r in biomasse:
         if i < 10:
-            model.addConstr ((route [r]  + mer [r]) <= 400 (1-périmètre))
-            model.addConstr(R[c,i]*perimètre >= 0.6*C[c,i])
+            model.addConstr ((route [r]  + mer [r]) >= 400*(1-perimetre[i]))
+            model.addConstr(R[r,i] <= 0.4*C[r,i]*perimetre[i])
 
  
-   
-        
    #contraintes ges
     
     if i<5:
@@ -119,13 +124,6 @@ for i in range(durée):
         quota.append(40000-quicksum(ges[c]*C[c,i] for c in combustible))
     if i>=15:
         quota.append(20000-quicksum(ges[c]*C[c,i] for c in combustible))
-    #contraintes sur les secheurs
-    nombre_petit_secheur[i+1]=nombre_petit_secheur[i]+nombre_petit_secheur_achete[i]
-    nombre_gros_secheur[i+1]=nombre_gros_secheur[i]+nombre_gros_secheur_achete[i]
-    model.addConstr(nombre_petit_secheur[i]+nombre_gros_secheur[i]<=5)
-    model.addConstr((quicksum(C[c,i] for c in boisfrais_sec)<=3000000000000-300000000000*(1-X2)))
-    
-    
     
     
 model.setObjective(5*sum(quota[i] for i in range(20))+quicksum(profit(c)*C[c,i] for c in combustible for i in range(20))- CF-cout_variable_incorp*X1-X2*quicksum(nombre_gros_secheur[i]*600000+nombre_petit_secheur[i]*300000 for i in range(20)),GRB.MAXIMIZE)
@@ -144,3 +142,6 @@ print(nombre_petit_secheur[i].x for i in range(20))
 print(f"Sur 20 ans le bénéfice est de : {Opti:.0f} euros")
 for c in combustible:
      print(c, int((sum(C[c,i].x for i in range(20)))/1000),"Kt")
+    
+for i in range(durée):
+    print(perimetre[i])
