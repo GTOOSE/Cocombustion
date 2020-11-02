@@ -38,7 +38,7 @@ combustible, pci, achat, vente, dispo1, dispo2, ges, route, mer = multidict({
         'rv3' : [25/3.6,115,43.2,GRB.INFINITY,30000,0.0001, 30, 0],
         'rv4' : [25/3.6,115,43.2,GRB.INFINITY,30000,0.0001, 50, 0],
         'rv5' : [25/3.6,115,43.2,GRB.INFINITY,30000,0.0001, 80, 0],
-        'br': [pcibr/3.6,12,115,85000,240000,0.0001, 4000, 40000]
+        'br': [pcibr/3.6,12,115,85000,240000,0.0001, 20, 0]
 })
 
 
@@ -68,13 +68,15 @@ model.modelSense = GRB.MAXIMIZE
 #Variale masse des combustibles
 C = model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
 #masse régionnale de biomasse achetée
-R = model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
+R = model.addVars (biomasse, 20, lb =0, vtype= GRB.CONTINUOUS)
         
 #Variales investissement stockage
 
 stock = model.addVar (lb = 0, vtype = GRB.BINARY)   
 investment = model.addVar (lb = 0, vtype = GRB.CONTINUOUS)
-perimetre = model.addVars (20,lb = 0, vtype = GRB.BINARY)   
+perimetre = model.addVars (combustible,20, lb = 0, vtype = GRB.BINARY)  
+region = model.addVars (20, lb = 0, vtype = GRB.INTEGER) 
+region_b = model.addVars(20, lb = 0, vtype = GRB.BINARY)
 
 #variables incorporation biomasse
 X1=model.addVar(vtype=GRB.BINARY)
@@ -87,7 +89,7 @@ nombre_petit_secheur_achete=model.addVars(20,lb=0,vtype = GRB.INTEGER)
 nombre_gros_secheur=model.addVars(20,lb=0,vtype = GRB.INTEGER)
 nombre_gros_secheur_achete=model.addVars(20,lb=0,vtype = GRB.INTEGER)
 X2=model.addVar(vtype=GRB.BINARY)
-périmètre = model.addVar (vtype = GRB.BINARY)
+
 
 
 
@@ -110,9 +112,15 @@ for i in range(durée):
     
     for r in biomasse:
         if i < 10:
-            model.addConstr ((route [r]  + mer [r]) >= 400*(1-perimetre[i]))
-            model.addConstr(R[r,i] <= 0.4*C[r,i]*perimetre[i])
-
+            model.addConstr ((route [r]  + mer [r]) >= 400*region_b[i])
+            model.addConstr (R[r,i]<= 0.4*C[r,i]*perimetre[r,i])
+            model.addConstr(perimetre[r,i]>= region_b[i])
+        if i > 10:
+            model.addConstr ((route [r]  + mer [r]) <= 400*region_b[i])
+            model.addConstr (R[r,i] <= C[r,i]*perimetre[r,i])
+            model.addConstr(perimetre[r,i]>= region_b[i])
+            
+                            
  
    #contraintes ges
     
@@ -126,7 +134,9 @@ for i in range(durée):
         quota.append(20000-quicksum(ges[c]*C[c,i] for c in combustible))
     
     
-model.setObjective(5*sum(quota[i] for i in range(20))+quicksum(profit(c)*C[c,i] for c in combustible for i in range(20))- CF-cout_variable_incorp*X1-X2*quicksum(nombre_gros_secheur[i]*600000+nombre_petit_secheur[i]*300000 for i in range(20)),GRB.MAXIMIZE)
+model.setObjective(5*sum(quota[i] for i in range(20))+quicksum(profit(c)*C[c,i] for c in combustible for i in range(20))
+                   +quicksum(profit(c)*R[r,i] for r in biomasse for i in range(20))
+                   - CF-cout_variable_incorp*X1-X2*quicksum(nombre_gros_secheur[i]*600000+nombre_petit_secheur[i]*300000 for i in range(20)),GRB.MAXIMIZE)
 
 model.optimize()
 
@@ -144,4 +154,4 @@ for c in combustible:
      print(c, int((sum(C[c,i].x for i in range(20)))/1000),"Kt")
     
 for i in range(durée):
-    print(perimetre[i])
+    print(perimetre[r,i])
