@@ -3,24 +3,28 @@ from gurobipy import *
 
 
 model = Model('COCOmbustion')
-model.modelSense = GRB.MAXIMIZE
-#Vaut 1 si le carbone devient un bénéfice, 0 sinon. Inséré dans objectif
+
+CF = 10050000          #cout fixe en euros O&M liés à la capacité de la centrale
+invest = 500000        # [e] prix du dédoublement de la capacité de stockage bois
+
+eff = 0.38             # [kWhelec / kWh thermique] efficacité énergétique
+prod = 990000/eff      # [kWh thermique/an] énergie à produire par la centrale 
+ratiocmin = 0.1        # ratio carbone dans le LFC
+durée = 20             # [ans]  durée d'exploitation
+pcibr = 18-21*0.2      # [GJ/t]  
+pcibf = 18-21*0.4      # [GJ/t]  
+pcibt = 18             # [GJ/t]  
+pcirv = 25             # [GJ/t]  
+pcic= 25               # [GJ/t]  
+spci=(18-21*0.05)/3.6  # [Mwh/t] PCI de la masse de biomasse séchée
+consobt = 0.025
+consobb = 0.08
+#prix des dispositifs de séchage
+sech50 = 300000       # [e] séchage de 50kt
+sech150 = 600000      # [e] séchage de 150kt
 
 
-CF = 10050000        #cout fixe en euros O&M liés à la capacité de la centrale
-eff = 0.38            #efficacité énergétique
-prod = 990000/eff
-ratiocmin = 0.1      # ratio carbone dans le LFC
-durée = 20
-Quota=[]
-pcibr = 18-21*0.2
-pcibf = 18-21*0.4
-pcibt = 18
-pcirv = 25
-pcic= 25
-spci=18-21*0.05
-invest = 50000
-
+#                      [Mwh/t], [%],    [e/Mwh]               [t/an]       [kco2/t]    [km]
 combustible,               pci, eau, achat, vente,      dispo1,       dispo2,   ges, route, mer= multidict({
 'charbon'         : [pcic/3.6,   1,    75,  43.2,GRB.INFINITY,GRB.INFINITY,      3,      0,    0],
 'Caroline-du-Sud' : [pcibt/3.6,   1,   190,   115,      700000,           0, 0.0017,   250, 7000],
@@ -56,8 +60,10 @@ boistorrefie = ['Caroline-du-Sud','Brésil','Québec','Canada Pacifique','Portug
 residuvert =['rv1','rv2','rv3','rv4','rv5']
 sechage =  ['rv1','rv2','rv3','rv4','rv5','MA','Cévennes30','Cévennes48','Cévennes07','Bouche du Rhone','Vaucluse','Var','Hautes Alpes','Alpes Hte Provence','Autres1','Autres2','Autres3']
 biomasse = ['MA','Cévennes30','Cévennes48','Cévennes07','br','Caroline-du-Sud','Brésil','Québec','Canada Pacifique','Portugal','Russie','rv1','rv2','rv3','rv4','rv5']
-
- 
+#liste pour le bois brute broyé == biomasse - granulés(bois torrefies)
+bois_brute = ['MA','Cévennes30','Cévennes48','Cévennes07','Bouche du Rhone','Vaucluse','Var','Hautes Alpes','Alpes Hte Provence','Autres1','Autres2','Autres3','rv1']
+#Création liste des valeurs de quota (dépassement ou pas) calculés
+Quota=[]
 
 #Création d'une liste liée à la localisation de la biomasse
 nonregion=[]
@@ -67,6 +73,8 @@ for c in biomasse:
         nonregion.append(c)
     else :
         region.append(c)
+        
+        
 #------FONCTION DE PROFIT-----
 
 def profit(c):
@@ -135,7 +143,7 @@ for i in range(durée):
             model.addConstr(C[c,i] <= dispo2[c])
         
     #GES
-#POSSIBILITE DE FAIRE UNE FONCTION ?????????
+    
     if i <5:
         Quota.append(80000-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
     elif i >=5 and i <10:
@@ -147,13 +155,15 @@ for i in range(durée):
         #rajouter variabile binaire pour si pas de benef on le fait pas
         
 
-model.setObjective(quot*sum(5*Quota[i] for i in range(20))
+model.setObjective(quot*sum(5*Quota[i] for i in range(durée))
                   
-                   +sum(profit(c)*C[c,i] for c in combustible for i in range(20))
+                   +sum(profit(c)*C[c,i] for c in combustible for i in range(durée))
                    
                    +sum(profit(c)*C[c,i] for c in region)+sum(profit(c)*C[c,i] for c in nonregion)-sum(profit(c)*C[c,i] for c in biomasse)
                    
-                   +quicksum(profit(c)*NS[c,i] for c in sechage for i in range(20))+quicksum((-eau[c]*profit(c)+sprofit(c))*S[c,i] for c in sechage for i in range(20)) -sum(s50[i] for i in range(20))*300000 -sum(s150[i] for i in range(20))*600000
+                   +quicksum(profit(c)*NS[c,i] for c in sechage for i in range(durée))+quicksum((-eau[c]*profit(c)+sprofit(c))*S[c,i] for c in sechage for i in range(durée)) -sum(s50[i] for i in range(durée))*sech50 -sum(s150[i] for i in range(durée))*sech150
+                   
+                   -sum(consobt*C[c,i]*vente[c] for c in boistorrefie for i in range(durée)) - sum(consobb*C[c,i]*vente[c] for c in bois_brute for i in range(durée))
                    
                    - CF - stock*invest,GRB.MAXIMIZE)
 
