@@ -23,12 +23,12 @@ invest = 50000
 
 combustible,               pci, eau, achat, vente,      dispo1,       dispo2,   ges, route, mer= multidict({
 'charbon'         : [pcic/3.6,   1,    75,  43.2,GRB.INFINITY,GRB.INFINITY,      3,      0,    0],
-'Caroline-du-Sud' : [pcibt/3.6,   1,   190,   115,           0,      700000, 0.0017,   250, 7000],
-'Brésil'          : [pcibt/3.6,   1,   170,   115,           0,      600000, 0.0017,  1000, 8500],
- 'Québec'         : [pcibt/3.6,   1,   180,   115,           0,      450000, 0.0017,   500, 5000],
-'Canada Pacifique': [pcibt/3.6,   1,   250,   115,           0,     1000000, 0.0017,   800,16500],
-'Portugal'        : [pcibt/3.6,   1,   240,   115,           0,      350000, 0.0017,  1700,    0],
-'Russie'          : [pcibt/3.6,   1,   300,   115,           0,      600000, 0.0017,  3000,    0],
+'Caroline-du-Sud' : [pcibt/3.6,   1,   190,   115,      700000,           0, 0.0017,   250, 7000],
+'Brésil'          : [pcibt/3.6,   1,   170,   115,      600000,           0, 0.0017,  1000, 8500],
+ 'Québec'         : [pcibt/3.6,   1,   180,   115,      450000,           0, 0.0017,   500, 5000],
+'Canada Pacifique': [pcibt/3.6,   1,   250,   115,     1000000,           0, 0.0017,   800,16500],
+'Portugal'        : [pcibt/3.6,   1,   240,   115,      350000,           0, 0.0017,  1700,    0],
+'Russie'          : [pcibt/3.6,   1,   300,   115,      600000,           0, 0.0017,  3000,    0],
 'MA'              : [pcibf/3.6, 1.2,   128,   115,       18000,       21000, 0.0013,   250,    0],
 'Cévennes30'      : [pcibf/3.6, 1.2,   120,   115,       21000,       43000, 0.0013,   210,    0],
 'Cévennes48'      : [pcibf/3.6 ,1.2,   128,   115,       12000,       75000, 0.0013,   230,    0],
@@ -56,6 +56,8 @@ boistorrefie = ['Caroline-du-Sud','Brésil','Québec','Canada Pacifique','Portug
 residuvert =['rv1','rv2','rv3','rv4','rv5']
 sechage =  ['rv1','rv2','rv3','rv4','rv5','MA','Cévennes30','Cévennes48','Cévennes07','Bouche du Rhone','Vaucluse','Var','Hautes Alpes','Alpes Hte Provence','Autres1','Autres2','Autres3']
 biomasse = ['MA','Cévennes30','Cévennes48','Cévennes07','br','Caroline-du-Sud','Brésil','Québec','Canada Pacifique','Portugal','Russie','rv1','rv2','rv3','rv4','rv5']
+
+ 
 
 #Création d'une liste liée à la localisation de la biomasse
 nonregion=[]
@@ -133,14 +135,15 @@ for i in range(durée):
             model.addConstr(C[c,i] <= dispo2[c])
         
     #GES
+#POSSIBILITE DE FAIRE UNE FONCTION ?????????
     if i <5:
-        Quota.append(80000-quicksum(ges[c]*C[c,i] for c in combustible))
+        Quota.append(80000-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
     elif i >=5 and i <10:
-        Quota.append(6000-quicksum(ges[c]*C[c,i] for c in combustible))
+        Quota.append(6000-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
     elif i >=10 and i <15:
-        Quota.append(4000-quicksum(ges[c]*C[c,i] for c in combustible))                                                             
+        Quota.append(4000-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))                                                             
     elif i >=15 :
-        Quota.append(2000-quicksum(ges[c]*C[c,i] for c in combustible))
+        Quota.append(2000-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
         #rajouter variabile binaire pour si pas de benef on le fait pas
         
 
@@ -173,13 +176,13 @@ for c in combustible:
 quota=[]    
 for i in range(20):
     if i <5:
-        quota.append(80000-quicksum(ges[c]*C[c,i].x for c in combustible))
+        quota.append(80000-quicksum(ges[c]*C[c,i].x for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
     elif i >=5 and i <10:
-        quota.append(60000-quicksum(ges[c]*C[c,i].x for c in combustible))
+        quota.append(60000-quicksum(ges[c]*C[c,i].x for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
     elif i >=10 and i <15:
-        quota.append(40000-quicksum(ges[c]*C[c,i].x for c in combustible))                                                             
+        quota.append(40000-quicksum(ges[c]*C[c,i].x for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))                                                             
     elif i >=15 :
-        quota.append(20000-quicksum(ges[c]*C[c,i].x for c in combustible))
+        quota.append(20000-quicksum(ges[c]*C[c,i].x for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
         #rajouter variabile binaire pour si pas de benef on le fait pas 
 s=0
 for i in quota:
@@ -205,7 +208,7 @@ print('masse  séchée', int((1.2*sum(S[c,i].x for i in range(20) for c in boisf
 print('masse NON séchée', int((sum(NS[c,i].x for i in range(20) for c in sechage))/1000),"Kt")
 """
 
-
+"""
 print('biomasse achetée',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in biomasse))/1000))
 print('biomasse R',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in region))/1000))
 print('biomasse NR',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in nonregion))/1000))
@@ -219,7 +222,8 @@ for i in range(durée):
     print(i,'ans')
     if sum(C[c,i].x for c in biomasse) != 0:
         print(sum(C[c,i].x for c in region)/sum(C[c,i].x for c in biomasse)*100,'%')
-
+"""
+print(LinExpr.getValue(sum(route[c]*C[c,i] for i in range(durée) for c in combustible )))
 """
 ------TEST AFFICHAGE DES CAPACITES DE STOCKAGE------
 for i in range(durée):
