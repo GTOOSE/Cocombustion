@@ -56,6 +56,8 @@ boistorrefie = ['Caroline-du-Sud','Brésil','Québec','Canada Pacifique','Portug
 residuvert =['rv1','rv2','rv3','rv4','rv5']
 sechage =  ['rv1','rv2','rv3','rv4','rv5','MA','Cévennes30','Cévennes48','Cévennes07','Bouche du Rhone','Vaucluse','Var','Hautes Alpes','Alpes Hte Provence','Autres1','Autres2','Autres3']
 biomasse = ['MA','Cévennes30','Cévennes48','Cévennes07','br','Caroline-du-Sud','Brésil','Québec','Canada Pacifique','Portugal','Russie','rv1','rv2','rv3','rv4','rv5']
+
+#Création d'une liste liée à la localisation de la biomasse
 nonregion=[]
 region=[]
 for c in biomasse:
@@ -78,9 +80,7 @@ C = model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
 #variable de masse séchée,S, (après le séchage) et non séchée, NS, pour chaque année pour chaque combustible 
 S=model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
 NS=model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
-#masse régionnale R ou non régionnale NR de biomasse achetée
-R = model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
-NR = model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
+
 
 #-------VARIABLES DECISIONNELLES BINAIRES -----
 
@@ -110,9 +110,10 @@ for i in range(durée):
     #il faut que la somme de la masse séchée à l'année i soit inférieur à la capcité de stockage mis en place les années précédentes
     model.addConstr(sum(eau[c]*S[c,i] for c in combustible) <= sum(s50[j] for j in range(0,i-1))*50000+sum(s150[j] for j in range(0,i-1))*150000)
     
+    #Avant 10 ans on peut jusqu'a 60% de region, et apres 100% région
     if i < 10:
             #je veux 60% de R sur l'ensemble de la biomasse soit R/C = 0,6 donc R - 0,6C = 0
-            model.addConstr((sum(C[c,i] for c in region))  <= 0.6*(sum(C[c,i] for c in biomasse)))
+            model.addConstr((sum(C[c,i] for c in region))  >= 0.6*(sum(C[c,i] for c in biomasse)))
     if i > 10:
            model.addConstr((sum(C[c,i] for c in region))  >= (sum(C[c,i] for c in biomasse)))
            
@@ -203,6 +204,8 @@ print('masse  achetée', int((sum(C[c,i].x for i in range(20) for c in sechage))
 print('masse  séchée', int((1.2*sum(S[c,i].x for i in range(20) for c in boisfrais)/1000)+1.4*sum(S[c,i].x for i in range(20) for c in residuvert)/1000),"Kt")
 print('masse NON séchée', int((sum(NS[c,i].x for i in range(20) for c in sechage))/1000),"Kt")
 """
+
+
 print('biomasse achetée',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in biomasse))/1000))
 print('biomasse R',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in region))/1000))
 print('biomasse NR',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in nonregion))/1000))
@@ -215,7 +218,7 @@ for i in range(durée):
     print()
     print(i,'ans')
     if sum(C[c,i].x for c in biomasse) != 0:
-        print(sum(C[c,i].x for c in region)/sum(C[c,i].x for c in biomasse))
+        print(sum(C[c,i].x for c in region)/sum(C[c,i].x for c in biomasse)*100,'%')
 
 """
 ------TEST AFFICHAGE DES CAPACITES DE STOCKAGE------
