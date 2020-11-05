@@ -1,5 +1,6 @@
 from gurobipy import *
-
+import numpy as np
+import pandas as pd
 
 
 model = Model('COCOmbustion')
@@ -11,14 +12,14 @@ eff = 0.38             # [kWhelec / kWh thermique] efficacité énergétique
 prod = 990000/eff      # [kWh thermique/an] énergie à produire par la centrale 
 ratiocmin = 0.1        # ratio carbone dans le LFC
 durée = 20             # [ans]  durée d'exploitation
-pcibr = 18-21*0.2      # [GJ/t]  
+pcibr = 18-21*0.05     # [GJ/t]  
 pcibf = 18-21*0.4      # [GJ/t]  
 pcibt = 18             # [GJ/t]  
-pcirv = 25             # [GJ/t]  
+pcirv = 18-21*0.02     # [GJ/t]  
 pcic= 25               # [GJ/t]  
-spci=(18-21*0.05)/3.6  # [Mwh/t] PCI de la masse de biomasse séchée
-consobt = 0.025
-consobb = 0.08
+spci=18-21*0.05        # [Mwh/t] PCI de la masse de biomasse séchée
+consobt = 0.025        # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
+consobb = 0.08         # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
 #prix des dispositifs de séchage
 sech50 = 300000       # [e] séchage de 50kt
 sech150 = 600000      # [e] séchage de 150kt
@@ -26,13 +27,15 @@ sech150 = 600000      # [e] séchage de 150kt
 
 #                      [Mwh/t], [%],    [e/Mwh]               [t/an]       [kco2/t]    [km]
 combustible,               pci, eau, achat, vente,      dispo1,       dispo2,   ges, route, mer= multidict({
-'charbon'         : [pcic/3.6,   1,    75,  43.2,GRB.INFINITY,GRB.INFINITY,      3,      0,    0],
+'charbon'         : [pcic/3.6,    1,    75,  43.2,GRB.INFINITY,GRB.INFINITY,      3,      0,    0],
+
 'Caroline-du-Sud' : [pcibt/3.6,   1,   190,   115,      700000,           0, 0.0017,   250, 7000],
 'Brésil'          : [pcibt/3.6,   1,   170,   115,      600000,           0, 0.0017,  1000, 8500],
  'Québec'         : [pcibt/3.6,   1,   180,   115,      450000,           0, 0.0017,   500, 5000],
 'Canada Pacifique': [pcibt/3.6,   1,   250,   115,     1000000,           0, 0.0017,   800,16500],
 'Portugal'        : [pcibt/3.6,   1,   240,   115,      350000,           0, 0.0017,  1700,    0],
 'Russie'          : [pcibt/3.6,   1,   300,   115,      600000,           0, 0.0017,  3000,    0],
+
 'MA'              : [pcibf/3.6, 1.2,   128,   115,       18000,       21000, 0.0013,   250,    0],
 'Cévennes30'      : [pcibf/3.6, 1.2,   120,   115,       21000,       43000, 0.0013,   210,    0],
 'Cévennes48'      : [pcibf/3.6 ,1.2,   128,   115,       12000,       75000, 0.0013,   230,    0],
@@ -45,34 +48,38 @@ combustible,               pci, eau, achat, vente,      dispo1,       dispo2,   
 'Autres1'         : [pcibf/3.6, 1.2,   116,   115,       27000,       27000, 0.0013,   200,    0],
 'Autres2'         : [pcibf/3.6, 1.2,   156,   115,       56000,       56000, 0.0013,   300,    0],
 'Autres3'         : [pcibf/3.6, 1.2,   196,   115,       93000,       93000, 0.0013,   400,    0],
-'rv1'             : [pcirv/3.6, 1.4,   115,  43.2,GRB.INFINITY,       30000, 0.0017,    10,    0],
-'rv2'             : [pcirv/3.6, 1.4,   115,  43.2,GRB.INFINITY,       30000, 0.0017,    20,    0],
-'rv3'             : [pcirv/3.6, 1.4,   115,  43.2,GRB.INFINITY,       30000, 0.0001,    30,    0],
-'rv4'             : [pcirv/3.6, 1.4,   115,  43.2,GRB.INFINITY,       30000, 0.0001,    50,    0],
-'rv5'             : [pcirv/3.6, 1.4,   115,  43.2,GRB.INFINITY,       30000, 0.0001,    80,    0],
+
+'rv1'             : [pcirv/3.6, 1.4,   0,     115,      313000,      313000, 0.0017,  1000,  0],
+
 'br'              : [pcibr/3.6,   1,    12,   115,       85000,      240000, 0.0001,     0,    0]
 })
 
-boisfrais = ['MA','Cévennes30','Cévennes48','Cévennes07','Bouche du Rhone','Vaucluse','Var','Hautes Alpes','Alpes Hte Provence','Autres1','Autres2','Autres3']
+boisfrais =   ['MA','Cévennes30','Cévennes48','Cévennes07','Bouche du Rhone','Vaucluse','Var','Hautes Alpes','Alpes Hte Provence','Autres1','Autres2','Autres3']
 boisrecycle = ['br']
-charbon = ['charbon']
-boistorrefie = ['Caroline-du-Sud','Brésil','Québec','Canada Pacifique','Portugal','Russie']
-residuvert =['rv1','rv2','rv3','rv4','rv5']
-sechage =  ['rv1','rv2','rv3','rv4','rv5','MA','Cévennes30','Cévennes48','Cévennes07','Bouche du Rhone','Vaucluse','Var','Hautes Alpes','Alpes Hte Provence','Autres1','Autres2','Autres3']
-biomasse = ['MA','Cévennes30','Cévennes48','Cévennes07','br','Caroline-du-Sud','Brésil','Québec','Canada Pacifique','Portugal','Russie','rv1','rv2','rv3','rv4','rv5']
+charbon =     ['charbon']
+boistorrefie =['Caroline-du-Sud','Brésil','Québec','Canada Pacifique','Portugal','Russie']
+residuvert =  ['rv1']
+
+sechage =     boisfrais+residuvert
+biomasse =    boisfrais+boisrecycle+boistorrefie+residuvert
 #liste pour le bois brute broyé == biomasse - granulés(bois torrefies)
-bois_brute = ['MA','Cévennes30','Cévennes48','Cévennes07','Bouche du Rhone','Vaucluse','Var','Hautes Alpes','Alpes Hte Provence','Autres1','Autres2','Autres3','rv1']
+bois_brute =  boisfrais+boisrecycle+residuvert
 #Création liste des valeurs de quota (dépassement ou pas) calculés
 Quota=[]
 
 #Création d'une liste liée à la localisation de la biomasse
 nonregion=[]
 region=[]
-for c in biomasse:
+for c in boisfrais+boisrecycle+residuvert+charbon:
     if (mer[c]+route[c])>= 400:
         nonregion.append(c)
     else :
         region.append(c)
+
+#Listes des points e l'approximation linéaires des prix RV
+cout_vert=20*[0]
+dispo_rv=np.array([0,1000,7000,22000,29000,52000,57000,143000,210000,313000])
+prix_rv=np.array([0,4,7,10,16,25,31,46,61,76])
         
         
 #------FONCTION DE PROFIT-----
@@ -81,7 +88,7 @@ def profit(c):
     return pci[c]*eff*vente[c] - achat[c]
 #profit après séchage de la biomasse avec un pci de 5% humidité (spci)
 def sprofit(c):
-    return spci*eff*vente[c] - achat[c]
+    return (spci/3.6)*eff*vente[c] - achat[c]
 
 
 #------VARIABLES DECISIONNELLES RELLES-----
@@ -104,6 +111,14 @@ quot = model.addVar (lb = 0, vtype = GRB.BINARY)
 #variable de masse séchée pour chaque année pour chaque combustible 
 nr = model.addVars (combustible,lb = 0, vtype = GRB.BINARY)  
 
+#----VARIABLES APPROXIMATION LINEAIRE-----
+
+lambda_rv=model.addVars(10,20,vtype=GRB.CONTINUOUS,ub=1)
+for i in range(20):
+    model.addSOS(GRB.SOS_TYPE2,[lambda_rv[j,i] for j in range(10)])
+
+prix_total_rv=dispo_rv*prix_rv
+
 #-----CONTRAINTES------
 
 #Pas plus de 5 séchoirs, de quelconque capacité
@@ -118,16 +133,16 @@ for i in range(durée):
     model.addConstr((sum(C[c,i] for c in boisrecycle))+(sum(C[c,i] for c in boistorrefie)) + (sum(C[c,i] for c in residuvert)) <= 1500*365*(1+stock))
    
     #il faut que la somme de la masse séchée à l'année i soit inférieur à la capcité de stockage mis en place les années précédentes
-    model.addConstr(sum(eau[c]*S[c,i] for c in combustible) <= sum(s50[j] for j in range(0,i-1))*50000+sum(s150[j] for j in range(0,i-1))*150000)
+    model.addConstr(sum(eau[c]*S[c,i] for c in combustible) <= sum(s50[j] for j in range(20))*50000+sum(s150[j] for j in range(20))*150000)
     
     #Avant 10 ans on peut jusqu'a 60% de region, et apres 100% région
     if i < 10:
             #je veux 60% de R sur l'ensemble de la biomasse soit R/C = 0,6 donc R - 0,6C = 0
-            model.addConstr((sum(C[c,i] for c in region))  >= 0.6*(sum(C[c,i] for c in biomasse)))
-    if i > 10:
-           model.addConstr((sum(C[c,i] for c in region))  >= (sum(C[c,i] for c in biomasse)))
+            model.addConstr((sum(C[c,i] for c in region))  >= 0.6*(sum(C[c,i] for c in boisfrais+boisrecycle+residuvert+charbon)))
+    if i >= 10:
+           model.addConstr((sum(C[c,i] for c in region))  >= (sum(C[c,i] for c in boisfrais+boisrecycle+residuvert+charbon)))
            
-    model.addConstr((sum(C[c,i] for c in region))+(sum(C[c,i] for c in nonregion))==(sum(C[c,i] for c in biomasse)))
+    model.addConstr((sum(C[c,i] for c in region))+(sum(C[c,i] for c in nonregion))==(sum(C[c,i] for c in boisfrais+boisrecycle+residuvert+charbon)))
     
     for c in sechage:
     #contrainte de séchage 
@@ -139,9 +154,9 @@ for i in range(durée):
     for c in combustible :
         if i < 10: #du coup on se retrouve < 2026
             model.addConstr(C[c,i] <= dispo1[c])
-        elif i > 10:
+        elif i >= 10:
             model.addConstr(C[c,i] <= dispo2[c])
-        
+    
     #GES
     
     if i <5:
@@ -154,16 +169,25 @@ for i in range(durée):
         Quota.append(2000-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
         #rajouter variabile binaire pour si pas de benef on le fait pas
         
+        #Modélisation de la fonction linéaire par morceaux des résidus verts
+        
+    model.addConstr(quicksum(lambda_rv[j,i] for j in range(10))==1)
+    model.addConstr(C['rv1',i]==quicksum(dispo_rv[j]*lambda_rv[j,i] for j in range(10)))
+    cout_vert[i]=quicksum(prix_total_rv[j]*lambda_rv[j,i] for j in range(10))  
+        
 
 model.setObjective(quot*sum(5*Quota[i] for i in range(durée))
                   
                    +sum(profit(c)*C[c,i] for c in combustible for i in range(durée))
                    
-                   +sum(profit(c)*C[c,i] for c in region)+sum(profit(c)*C[c,i] for c in nonregion)-sum(profit(c)*C[c,i] for c in biomasse)
+                   +sum(profit(c)*C[c,i] for c in region+nonregion)-sum(profit(c)*C[c,i] for c in region+nonregion)
                    
-                   +quicksum(profit(c)*NS[c,i] for c in sechage for i in range(durée))+quicksum((-eau[c]*profit(c)+sprofit(c))*S[c,i] for c in sechage for i in range(durée)) -sum(s50[i] for i in range(durée))*sech50 -sum(s150[i] for i in range(durée))*sech150
+                   +sum(profit(c)*NS[c,i] for c in sechage for i in range(durée))+sum((-eau[c]*profit(c)+sprofit(c))*S[c,i] for c in sechage for i in range(durée)) -sum(s50[i] for i in range(durée))*sech50 -sum(s150[i] for i in range(durée))*sech150
+                   -sum(profit(c)*C[c,i] for c in sechage for i in range(durée))
                    
                    -sum(consobt*C[c,i]*vente[c] for c in boistorrefie for i in range(durée)) - sum(consobb*C[c,i]*vente[c] for c in bois_brute for i in range(durée))
+                   
+                   -sum(cout_vert[i] for i in range(durée))
                    
                    - CF - stock*invest,GRB.MAXIMIZE)
 
@@ -175,7 +199,46 @@ Obj=model.getObjective()
 Opti=Obj.getValue()
 print(f"Sur 20 ans le bénéfice est de : {Opti:.0f} euros")
 
+charbonn = np.ones(shape=(20,1))
+bt = np.ones(shape=(20,1))
+br = np.ones(shape=(20,1))
+bs = np.ones(shape=(20,1))
+rv = np.ones(shape=(20,1))
+ss = np.ones(shape=(20,1))
+bf = np.ones(shape=(20,1))
+bbb = np.ones(shape=(20,1))
+
+for i in range(durée):
+    charbonn[i,0]=int(sum(C[c,i].x for c in charbon))/1000
+    bt[i,0]=int(sum(C[c,i].x for c in boistorrefie))/1000
+    br[i,0]=int(sum(C[c,i].x for c in boisrecycle))/1000
+    rv[i,0]=int(sum(C[c,i].x for c in residuvert))/1000-int(sum(eau[c]*S[c,i].x for c in residuvert))/1000
+    ss[i,0]=int(sum(eau[c]*S[c,i].x for c in biomasse))/1000
+    bf[i,0]=int(sum(C[c,i].x for c in boisfrais))/1000-int(sum(eau[c]*S[c,i].x for c in boisfrais))/1000
+    bbb[i,0]=int(sum(C[c,i].x for c in biomasse))/1000
+    
+data = np.concatenate((charbonn,bt),axis=1)
+data = np.concatenate((data,br),axis=1)
+data = np.concatenate((data,rv),axis=1)
+
+data = np.concatenate((data,ss),axis=1)
+data = np.concatenate((data,bf),axis=1)
+
+comb = ['Charbon','BoisTorrefie','BoisRecycke','ResiduVert','BoisSec','BoisFrais']
+duree = []
+for i in range(durée):
+    duree.append(i+1)
+
+df = df = pd.DataFrame(data=data,index=duree,columns=comb)
+print(df)
 """
+for i in range(durée):
+    print()
+    print(i)
+    print(int(sum(eau[c]*S[c,i].x for c in biomasse))/1000)
+    print(sum(s50[i].x for i in range(durée))*50 + sum(s150[i].x for i in range(durée))*150)
+"""
+"""""
 -------AFFICHE LES MASSES DE COMBUSTIBLES ACHETEES ----
 for c in combustible:
     print(c, int((sum(C[c,i].x for i in range(20)))/1000),"Kt")
@@ -208,8 +271,6 @@ for c in sechage:
     print('masse séchée',c, int((sum(S[c,i].x for i in range(20)))/1000),"Kt")
     print('masse NON séchée',c, int((sum(NS[c,i].x for i in range(20)))/1000),"Kt")
     print()"""
-
-
 """
 -----TEST AFFICHAGE DES MASSES SECHEES OU NON / TOTAL -----
 print('-----recap')
@@ -219,6 +280,7 @@ print('masse NON séchée', int((sum(NS[c,i].x for i in range(20) for c in secha
 """
 
 """
+----TEST APPROVISIONNEMENT REGIONNAL-----
 print('biomasse achetée',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in biomasse))/1000))
 print('biomasse R',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in region))/1000))
 print('biomasse NR',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in nonregion))/1000))
@@ -226,19 +288,25 @@ print('biomasse NR',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in 
 for c in biomasse :
     print(c,nr[c].x)
 
-  
 for i in range(durée):
     print()
     print(i,'ans')
     if sum(C[c,i].x for c in biomasse) != 0:
         print(sum(C[c,i].x for c in region)/sum(C[c,i].x for c in biomasse)*100,'%')
 """
-print(LinExpr.getValue(sum(route[c]*C[c,i] for i in range(durée) for c in combustible )))
+
 """
-------TEST AFFICHAGE DES CAPACITES DE STOCKAGE------
+#------TEST AFFICHAGE DES CAPACITES DE STOCKAGE------
 for i in range(durée):
     print(s50[i])
     print(s150[i])
 #capacité totale de sechage sur les 20ans
-print(LinExpr.getValue(sum(s50[i] for i in range(20)))*50000+LinExpr.getValue(sum(s150[i] for i in range(20)))*150000)
+print((LinExpr.getValue(sum(s50[i] for i in range(20)))*50000+LinExpr.getValue(sum(s150[i] for i in range(20)))*150000)/1000)
 """
+"""
+# TEST AFFICHAGE LAMBDA
+
+for i in range(20):
+    print('lambda',i,sum(lambda_rv[j,i].x for j in range(10)))
+"""
+
