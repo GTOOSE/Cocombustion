@@ -15,14 +15,14 @@ durée = 20             # [ans]  durée d'exploitation
 pcibr = 18-21*0.05     # [GJ/t]  
 pcibf = 18-21*0.4      # [GJ/t]  
 pcibt = 18             # [GJ/t]  
-pcirv = 18-21*0.02     # [GJ/t]  
+pcirv = 18-21*0.2     # [GJ/t]  
 pcic= 25               # [GJ/t]  
 spci=18-21*0.05       # [Mwh/t] PCI de la masse de biomasse séchée
 consobt = 0.025        # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
 consobb = 0.08         # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
 #prix des dispositifs de séchage
-sech50 = 300000       # [e] séchage de 50kt
-sech150 = 600000      # [e] séchage de 150kt
+sech50 = 300000       # [e] prix séchage de 50kt
+sech150 = 600000      # [e] prix séchage de 150kt
 
 
 #                      [Mwh/t], [%],    [e/Mwh]               [t/an]       [kco2/t]    [km]
@@ -49,7 +49,7 @@ combustible,               pci, eau, achat, vente,      dispo1,       dispo2,   
 'Autres2'         : [pcibf/3.6, 1.2,   156,   115,       56000,       56000, 0.0013,   300,    0],
 'Autres3'         : [pcibf/3.6, 1.2,   196,   115,       93000,       93000, 0.0013,   400,    0],
 
-'rv1'             : [pcirv/3.6, 1.4,   100,     115,      313000,      313000, 0.0017,  1000,  0],
+'rv1'             : [pcirv/3.6, 1.4,   0,     115,      313000,      313000, 0.0017,  1000,  0],
 
 'br'              : [pcibr/3.6,   1,    12,   115,       85000,      240000, 0.0001,     0,    0]
 })
@@ -104,6 +104,7 @@ NS=model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
 #variables binaires d'achat de capacité de stockage modéré s50 ou grand s150
 s50 = model.addVars (20,lb = 0, vtype = GRB.BINARY)
 s150 = model.addVars (20,lb = 0, vtype = GRB.BINARY)
+sec = model.addVars (20,lb = 0, vtype = GRB.BINARY)
 #variable binaire de la capacité de stockage doublée ou non. Vaut 1 si le stockage double est rentable
 stock = model.addVar (lb = 0, vtype = GRB.BINARY)   
 #Vaut 1 si le carbone devient un bénéfice, 0 sinon. Inséré dans objectif
@@ -120,21 +121,27 @@ for i in range(20):
 prix_total_rv=dispo_rv*prix_rv
 
 #-----CONTRAINTES------
-
+#-----séchage
+for i in range(durée):
+    #il faut que la somme de la masse mise dans les séchoirs (avant séchage) à l'année i soit inférieur à la capcité de stockage mis en place les années précédentes
+    model.addConstr(sum(eau[c]*S[c,i] for c in sechage) <= sum(s50[j]*50000+s150[j]*150000 for j in range(0,i+1)))
+    for c in sechage:
+    #contrainte de séchage 
+    #je veux que la masse séchée, plus le poids d'eau perdu, plus la masse non séchée soit égale a la masse achetée
+    ## CHANGER NS par C-S*(1-eau)
+        model.addConstr(eau[c]*S[c,i]+NS[c,i]  == C[c,i] )
 #Pas plus de 5 séchoirs, de quelconque capacité
 model.addConstr(sum(s50[i] for i in range(durée))+sum(s150[i] for i in range(durée)) <= 5)
 
+        
 for i in range(durée):
     #Assure la production énergétique pour chaque année i
     model.addConstr(sum(pci[c]*C[c,i] for c in combustible) == prod)
     #Assure les 10% de charbon pour chaque année i 
     model.addConstr((1-ratiocmin)*(sum(C[c,i] for c in charbon))-(ratiocmin*(sum(C[c,i] for c in boisfrais)+sum(C[c,i] for c in boisrecycle)+sum(C[c,i] for c in boistorrefie)+sum(C[c,i] for c in residuvert)))  >= 0)
     #Assure le stockage pour chaque jour i/365
-    model.addConstr((sum(C[c,i] for c in boisrecycle))+(sum(C[c,i] for c in boistorrefie)) + (sum(C[c,i] for c in residuvert)) <= 1500*365*(1+stock))
+    model.addConstr((sum(C[c,i] for c in bois_brute))<= 1500*365*(1+stock))
    
-    #il faut que la somme de la masse séchée à l'année i soit inférieur à la capcité de stockage mis en place les années précédentes
-    model.addConstr(sum(eau[c]*S[c,i] for c in sechage) <= sum(s50[j] for j in range(20))*50000+sum(s150[j] for j in range(20))*150000)
-    
     #Avant 10 ans on peut jusqu'a 60% de region, et apres 100% région
     if i < 10:
             #je veux 60% de R sur l'ensemble de la biomasse soit R/C = 0,6 donc R - 0,6C = 0
@@ -144,11 +151,7 @@ for i in range(durée):
            
     model.addConstr((sum(C[c,i] for c in region))+(sum(C[c,i] for c in nonregion))==(sum(C[c,i] for c in region+nonregion)))
     
-    for c in sechage:
-    #contrainte de séchage 
-    #je veux que la masse séchée, plus le poids d'eau perdu, plus la masse non séchée soit égale a la masse achetée
-    ## CHANGER NS par C-S*(1-eau)
-        model.addConstr(eau[c]*S[c,i]+NS[c,i]  == C[c,i] )
+
     
     #valeur de disponibilité
     for c in combustible :
@@ -176,17 +179,17 @@ for i in range(durée):
         
 
 model.setObjective(quot*sum(5*Quota[i] for i in range(durée))
-                  
+                   #Max du profit en prenant tous les combustibles
                    +sum(profit(c)*C[c,i] for c in combustible for i in range(durée))
                    
-                   +sum(profit(c)*C[c,i] for c in region+nonregion)-sum(profit(c)*C[c,i] for c in region+nonregion)
                    #on ne laisse pas le choix on optimise des la premiere année, ajout binaire pour choix année
-                   +sum(profit(c)*NS[c,i] for c in sechage for i in range(durée))+sum(sprofit(c)*S[c,i] for c in sechage for i in range(durée)) -sum(s50[i] for i in range(durée))*sech50 -sum(s150[i] for i in range(durée))*sech150
-                   -sum(profit(c)*C[c,i] for c in sechage for i in range(durée))
+                   +(sum(profit(c)*(NS[c,i]-C[c,i])+S[c,i]*sprofit(c) for c in sechage for i in range(durée))
+                   -sum(s50[i] for i in range(durée))*sech50 -sum(s150[i] for i in range(durée))*sech150 )
                    
-                   -sum(consobt*C[c,i]*vente[c] for c in boistorrefie for i in range(durée)) - sum(consobb*C[c,i]*vente[c] for c in bois_brute for i in range(durée))
+                   #Calcul les pertes liées à l'autoconsommation électrique pour le broyage
+                   -sum(consobt*C[c,i]*vente[c] for c in boistorrefie+bois_brute for i in range(durée)) 
                    
-                   -sum(cout_vert[i] for i in range(durée))
+                   #-sum(cout_vert[i] for i in range(durée))
                    
                    - CF - stock*invest,GRB.MAXIMIZE)
 
@@ -206,6 +209,7 @@ rv = np.ones(shape=(20,1))
 ss = np.ones(shape=(20,1))
 bf = np.ones(shape=(20,1))
 bbb = np.ones(shape=(20,1))
+rvs = np.ones(shape=(20,1))
 
 for i in range(durée):
     charbonn[i,0]=int(sum(C[c,i].x for c in charbon))/1000
@@ -215,15 +219,17 @@ for i in range(durée):
     ss[i,0]=int(sum(eau[c]*S[c,i].x for c in sechage))/1000
     bf[i,0]=int(sum(C[c,i].x for c in boisfrais))/1000-int(sum(eau[c]*S[c,i].x for c in boisfrais))/1000
     bbb[i,0]=int(sum(C[c,i].x for c in biomasse))/1000
+    rvs[i,0]=int(sum(S[c,i].x for c in residuvert))/1000
     
 data = np.concatenate((charbonn,bt),axis=1)
 data = np.concatenate((data,br),axis=1)
 data = np.concatenate((data,rv),axis=1)
-
+data = np.concatenate((data,rvs),axis=1)
 data = np.concatenate((data,ss),axis=1)
 data = np.concatenate((data,bf),axis=1)
 
-comb = ['Charbon','BoisTorrefie','BoisRecycke','ResiduVert','BoisSec','BoisFrais']
+
+comb = ['   Charbon','   BT','   BR','   RV','   RVS','   BS','   BF']
 duree = []
 for i in range(durée):
     duree.append(i+1)
@@ -237,8 +243,8 @@ for c in combustible:
     print(c, int((sum(C[c,i].x for i in range(20)))/1000),"Kt")
 """
 
-"""
------- TEST CALCUL DU QUOTA -----
+
+#------ TEST CALCUL DU QUOTA -----
 quota=[]    
 for i in range(20):
     if i <5:
@@ -253,9 +259,9 @@ for i in range(20):
 s=0
 for i in quota:
     s=s+i
-print('valeur de quota', LinExpr.getValue(s))
-print('quot : variable de prise en compte quota carbone', quot.x)
-"""
+print('Quota Carbone estimé à : ', int(LinExpr.getValue(s)),'euros')
+#print('quot : variable de prise en compte quota carbone', quot.x)
+
 
 """
 #-----TEST AFFICHAGE DES MASSES SECHEES OU NON / COMBUSTIBLES -----
@@ -264,7 +270,7 @@ for i in range(durée):
     print('masse séchée',c, int((sum(eau[c]*S[c,i].x for c in sechage))/1000),"Kt")
     print('masse NON séchée',c, int((sum(NS[c,i].x for c in sechage))/1000),"Kt")
 """    
-print(sum(s50[i].x for i in range(durée))*50 + sum(s150[i].x for i in range(durée))*150)
+
 """  print()
 
 #-----TEST AFFICHAGE DES MASSES SECHEES OU NON / TOTAL -----
@@ -274,12 +280,12 @@ print('masse  séchée', int((sum(eau[c]*S[c,i].x for i in range(20) for c in se
 print('masse NON séchée', int((sum(NS[c,i].x for i in range(20) for c in sechage))/1000),"Kt")
 """
 
-"""
-----TEST APPROVISIONNEMENT REGIONNAL-----
+
+#----TEST APPROVISIONNEMENT REGIONNAL-----
 print('biomasse achetée',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in biomasse))/1000))
 print('biomasse R',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in region))/1000))
 print('biomasse NR',int(LinExpr.getValue(sum(C[c,i] for i in range(20) for c in nonregion))/1000))
-
+"""
 for c in biomasse :
     print(c,nr[c].x)
 
@@ -290,18 +296,21 @@ for i in range(durée):
         print(sum(C[c,i].x for c in region)/sum(C[c,i].x for c in biomasse)*100,'%')
 """
 
-"""
-#------TEST AFFICHAGE DES CAPACITES DE STOCKAGE------
-for i in range(durée):
-    print(s50[i])
-    print(s150[i])
+
+#------TEST AFFICHAGE DES CAPACITES DE SECHAGE------
+#for i in range(durée):
+#    print(s50[i])
+#    print(s150[i])
 #capacité totale de sechage sur les 20ans
-print((LinExpr.getValue(sum(s50[i] for i in range(20)))*50000+LinExpr.getValue(sum(s150[i] for i in range(20)))*150000)/1000)
-"""
+print('Capacité de séchage : ',(LinExpr.getValue(sum(s50[i] for i in range(20)))*50000+LinExpr.getValue(sum(s150[i] for i in range(20)))*150000)/1000)
+
+#-----AFFICHAGE CAPACITE DE STOCKAGE------
+if stock.x>=1:
+    print('Investissement dans le stockage de bois : Oui')
+
 """
 # TEST AFFICHAGE LAMBDA
 
 for i in range(20):
     print('lambda',i,sum(lambda_rv[j,i].x for j in range(10)))
 """
-
