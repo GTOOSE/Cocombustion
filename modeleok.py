@@ -17,7 +17,7 @@ pcibf = 18-21*0.4      # [GJ/t]
 pcibt = 18             # [GJ/t]  
 pcirv = 18-21*0.02     # [GJ/t]  
 pcic= 25               # [GJ/t]  
-spci=18-21*0.05        # [Mwh/t] PCI de la masse de biomasse séchée
+spci=18-21*0.05       # [Mwh/t] PCI de la masse de biomasse séchée
 consobt = 0.025        # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
 consobb = 0.08         # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
 #prix des dispositifs de séchage
@@ -138,11 +138,11 @@ for i in range(durée):
     #Avant 10 ans on peut jusqu'a 60% de region, et apres 100% région
     if i < 10:
             #je veux 60% de R sur l'ensemble de la biomasse soit R/C = 0,6 donc R - 0,6C = 0
-            model.addConstr((sum(C[c,i] for c in region))  >= 0.6*(sum(C[c,i] for c in boisfrais+boisrecycle+residuvert+charbon)))
+            model.addConstr((sum(C[c,i] for c in region))  >= 0.6*(sum(C[c,i] for c in biomasse)))
     if i >= 10:
-           model.addConstr((sum(C[c,i] for c in region))  >= (sum(C[c,i] for c in boisfrais+boisrecycle+residuvert+charbon)))
+           model.addConstr((sum(C[c,i] for c in region))  >= (sum(C[c,i] for c in biomasse)))
            
-    model.addConstr((sum(C[c,i] for c in region))+(sum(C[c,i] for c in nonregion))==(sum(C[c,i] for c in boisfrais+boisrecycle+residuvert+charbon)))
+    model.addConstr((sum(C[c,i] for c in region))+(sum(C[c,i] for c in nonregion))==(sum(C[c,i] for c in region+nonregion)))
     
     for c in sechage:
     #contrainte de séchage 
@@ -180,8 +180,8 @@ model.setObjective(quot*sum(5*Quota[i] for i in range(durée))
                    +sum(profit(c)*C[c,i] for c in combustible for i in range(durée))
                    
                    +sum(profit(c)*C[c,i] for c in region+nonregion)-sum(profit(c)*C[c,i] for c in region+nonregion)
-                   
-                   +sum(profit(c)*NS[c,i] for c in sechage for i in range(durée))+sum((-eau[c]*profit(c)+sprofit(c))*S[c,i] for c in sechage for i in range(durée)) -sum(s50[i] for i in range(durée))*sech50 -sum(s150[i] for i in range(durée))*sech150
+                   #on ne laisse pas le choix on optimise des la premiere année, ajout binaire pour choix année
+                   +sum(profit(c)*NS[c,i] for c in sechage for i in range(durée))+sum(sprofit(c)*S[c,i] for c in sechage for i in range(durée)) -sum(s50[i] for i in range(durée))*sech50 -sum(s150[i] for i in range(durée))*sech150
                    -sum(profit(c)*C[c,i] for c in sechage for i in range(durée))
                    
                    -sum(consobt*C[c,i]*vente[c] for c in boistorrefie for i in range(durée)) - sum(consobb*C[c,i]*vente[c] for c in bois_brute for i in range(durée))
@@ -263,8 +263,9 @@ for i in range(durée):
     print('masse achetée',c, int((sum(C[c,i].x for c in sechage))/1000),"Kt")
     print('masse séchée',c, int((sum(eau[c]*S[c,i].x for c in sechage))/1000),"Kt")
     print('masse NON séchée',c, int((sum(NS[c,i].x for c in sechage))/1000),"Kt")
-    print(sum(s50[i].x for i in range(durée))*50 + sum(s150[i].x for i in range(durée))*150)
-    print()
+"""    
+print(sum(s50[i].x for i in range(durée))*50 + sum(s150[i].x for i in range(durée))*150)
+"""  print()
 
 #-----TEST AFFICHAGE DES MASSES SECHEES OU NON / TOTAL -----
 print('-----recap')
