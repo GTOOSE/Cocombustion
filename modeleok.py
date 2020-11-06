@@ -49,7 +49,7 @@ combustible,               pci, eau, achat, vente,      dispo1,       dispo2,   
 'Autres2'         : [pcibf/3.6, 1.2,   156,   115,       56000,       56000, 0.0013,   300,    0],
 'Autres3'         : [pcibf/3.6, 1.2,   196,   115,       93000,       93000, 0.0013,   400,    0],
 
-'rv1'             : [pcirv/3.6, 1.4,   0,     115,      313000,      313000, 0.0017,  1000,  0],
+'rv1'             : [pcirv/3.6, 1.4,   100,     115,      313000,      313000, 0.0017,  1000,  0],
 
 'br'              : [pcibr/3.6,   1,    12,   115,       85000,      240000, 0.0001,     0,    0]
 })
@@ -133,7 +133,7 @@ for i in range(durée):
     model.addConstr((sum(C[c,i] for c in boisrecycle))+(sum(C[c,i] for c in boistorrefie)) + (sum(C[c,i] for c in residuvert)) <= 1500*365*(1+stock))
    
     #il faut que la somme de la masse séchée à l'année i soit inférieur à la capcité de stockage mis en place les années précédentes
-    model.addConstr(sum(eau[c]*S[c,i] for c in combustible) <= sum(s50[j] for j in range(20))*50000+sum(s150[j] for j in range(20))*150000)
+    model.addConstr(sum(eau[c]*S[c,i] for c in sechage) <= sum(s50[j] for j in range(20))*50000+sum(s150[j] for j in range(20))*150000)
     
     #Avant 10 ans on peut jusqu'a 60% de region, et apres 100% région
     if i < 10:
@@ -158,7 +158,6 @@ for i in range(durée):
             model.addConstr(C[c,i] <= dispo2[c])
     
     #GES
-    
     if i <5:
         Quota.append(80000-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
     elif i >=5 and i <10:
@@ -213,7 +212,7 @@ for i in range(durée):
     bt[i,0]=int(sum(C[c,i].x for c in boistorrefie))/1000
     br[i,0]=int(sum(C[c,i].x for c in boisrecycle))/1000
     rv[i,0]=int(sum(C[c,i].x for c in residuvert))/1000-int(sum(eau[c]*S[c,i].x for c in residuvert))/1000
-    ss[i,0]=int(sum(eau[c]*S[c,i].x for c in biomasse))/1000
+    ss[i,0]=int(sum(eau[c]*S[c,i].x for c in sechage))/1000
     bf[i,0]=int(sum(C[c,i].x for c in boisfrais))/1000-int(sum(eau[c]*S[c,i].x for c in boisfrais))/1000
     bbb[i,0]=int(sum(C[c,i].x for c in biomasse))/1000
     
@@ -231,13 +230,7 @@ for i in range(durée):
 
 df = df = pd.DataFrame(data=data,index=duree,columns=comb)
 print(df)
-"""
-for i in range(durée):
-    print()
-    print(i)
-    print(int(sum(eau[c]*S[c,i].x for c in biomasse))/1000)
-    print(sum(s50[i].x for i in range(durée))*50 + sum(s150[i].x for i in range(durée))*150)
-"""
+
 """""
 -------AFFICHE LES MASSES DE COMBUSTIBLES ACHETEES ----
 for c in combustible:
@@ -265,17 +258,18 @@ print('quot : variable de prise en compte quota carbone', quot.x)
 """
 
 """
------TEST AFFICHAGE DES MASSES SECHEES OU NON / COMBUSTIBLES -----
-for c in sechage:
-    print('masse achetée',c, int((sum(C[c,i].x for i in range(20)))/1000),"Kt")
-    print('masse séchée',c, int((sum(S[c,i].x for i in range(20)))/1000),"Kt")
-    print('masse NON séchée',c, int((sum(NS[c,i].x for i in range(20)))/1000),"Kt")
-    print()"""
-"""
------TEST AFFICHAGE DES MASSES SECHEES OU NON / TOTAL -----
+#-----TEST AFFICHAGE DES MASSES SECHEES OU NON / COMBUSTIBLES -----
+for i in range(durée):
+    print('masse achetée',c, int((sum(C[c,i].x for c in sechage))/1000),"Kt")
+    print('masse séchée',c, int((sum(eau[c]*S[c,i].x for c in sechage))/1000),"Kt")
+    print('masse NON séchée',c, int((sum(NS[c,i].x for c in sechage))/1000),"Kt")
+    print(sum(s50[i].x for i in range(durée))*50 + sum(s150[i].x for i in range(durée))*150)
+    print()
+
+#-----TEST AFFICHAGE DES MASSES SECHEES OU NON / TOTAL -----
 print('-----recap')
 print('masse  achetée', int((sum(C[c,i].x for i in range(20) for c in sechage))/1000),"Kt")    
-print('masse  séchée', int((1.2*sum(S[c,i].x for i in range(20) for c in boisfrais)/1000)+1.4*sum(S[c,i].x for i in range(20) for c in residuvert)/1000),"Kt")
+print('masse  séchée', int((sum(eau[c]*S[c,i].x for i in range(20) for c in sechage)/1000)))
 print('masse NON séchée', int((sum(NS[c,i].x for i in range(20) for c in sechage))/1000),"Kt")
 """
 
