@@ -4,30 +4,31 @@ import pandas as pd
 
 
 model = Model('COCOmbustion')
+
+
+eff = 0.38             # [kWhelec / kWh thermique] efficacité énergétique
+prod = 990000/eff      # [kWh elec/an] énergie à produire par la centrale 
+ratiocmin = 0.1        # ratio carbone dans le LFC
+durée = 20             # [ans]  durée d'exploitation
+pcibr = 18-21*0.05     # [GJ/t]  
+pcibf = 18-21*0.4      # [GJ/t]  
+pcibt = 18             # [GJ/t]  
+pcirv = 18-21*0.2      # [GJ/t]  
+pcic= 25               # [GJ/t]  
+spci=18-21*0.05        # [Mwh/t] PCI de la masse de biomasse séchée
+consobt = 0.025        # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
+consobb = 0.08         # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
+
+
 #CAPEX
-CF = 10050000          #cout fixe en euros O&M liés à la capacité de la centrale
+CF = 256000000          #cout fixe achat centrale
 invest = 500000        # [e] prix du dédoublement de la capacité de stockage bois
 sech50 = 300000       # [e] prix séchage de 50kt
 sech150 = 600000      # [e] prix séchage de 150kt
 
 #CVariables
 coutbr = 12           # [e/t] cout de recyclage et de transport du bois recyclé
-
-eff = 0.38             # [kWhelec / kWh thermique] efficacité énergétique
-prod = 990000/eff      # [kWh thermique/an] énergie à produire par la centrale 
-ratiocmin = 0.1        # ratio carbone dans le LFC
-durée = 20             # [ans]  durée d'exploitation
-pcibr = 18-21*0.05     # [GJ/t]  
-pcibf = 18-21*0.4      # [GJ/t]  
-pcibt = 18             # [GJ/t]  
-pcirv = 18-21*0.2     # [GJ/t]  
-pcic= 25               # [GJ/t]  
-spci=18-21*0.05       # [Mwh/t] PCI de la masse de biomasse séchée
-consobt = 0.025        # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
-consobb = 0.08         # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
-
-
-
+CV = 67 * prod 
 
 
 #                      [Mwh/t], [%],    [e/Mwh]               [t/an]       [kco2/t]    [km]
@@ -95,7 +96,8 @@ C = model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
 S=model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
 NS=model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
 
-
+X1 = model.addVars (20,lb=0,vtype=GRB.BINARY)
+COU = model.addVars (20,lb=0,vtype=GRB.CONTINUOUS)
 #-------VARIABLES DECISIONNELLES BINAIRES -----
 
 #variables binaires d'achat de capacité de stockage modéré s50 ou grand s150
@@ -119,6 +121,7 @@ def profit(c):
 def sprofit(c):
     return (spci/3.6)*eff*vente[c] - achat[c]
 
+
 #----VARIABLES APPROXIMATION LINEAIRE-----
 
 lambda_rv=model.addVars(10,20,vtype=GRB.CONTINUOUS,ub=1)
@@ -128,6 +131,12 @@ for i in range(20):
 prix_total_rv=dispo_rv*prix_rv
 
 #-----CONTRAINTES------
+
+#incorporation de la biomasse 
+for i in range(durée):
+    model.addConstr(sum(C[c,i] for c in biomasse) <= 0.5*sum(C[c,i] for c in charbon+boistorrefie+boisrecycle+residuvert+boisfrais)*(1+X1[i]))
+    COU[i] = ((430/277) *(X1[i]) + (215/277)*(1-X1[i]))*prod
+
 #-----séchage
 for i in range(durée):
     #il faut que la somme de la masse mise dans les séchoirs (avant séchage) à l'année i soit inférieur à la capcité de stockage mis en place les années précédentes
@@ -145,7 +154,7 @@ for i in range(durée):
     #Assure la production énergétique pour chaque année i
     model.addConstr(sum(pci[c]*C[c,i] for c in combustible) == prod)
     #Assure les 10% de charbon pour chaque année i 
-    model.addConstr((1-ratiocmin)*(sum(C[c,i] for c in charbon))-(ratiocmin*(sum(C[c,i] for c in boisfrais)+sum(C[c,i] for c in boisrecycle)+sum(C[c,i] for c in boistorrefie)+sum(C[c,i] for c in residuvert)))  >= 0)
+    model.addConstr((1-ratiocmin)*(sum(C[c,i] for c in charbon))-(ratiocmin*(sum(C[c,i] for c in boisfrais+boisrecycle+boistorrefie+residuvert)))  >= 0)
     #Assure le stockage pour chaque jour i/365
     model.addConstr((sum(C[c,i] for c in bois_brute))<= 1500*365*(1+stock))
    
@@ -200,7 +209,11 @@ model.setObjective(quot*sum(5*Quota[i] for i in range(durée))
                    
                    -12*(sum(C[c,i] for c in boisrecycle)) 
                    
-                   CF - stock*invest,GRB.MAXIMIZE)
+                   - CV 
+                   
+                   -sum(COU[i] for i in range(durée))
+                           
+                   - CF - stock*invest,GRB.MAXIMIZE)
 
 model.optimize()
 
@@ -323,3 +336,10 @@ if stock.x>=1:
 for i in range(20):
     print('lambda',i,sum(lambda_rv[j,i].x for j in range(10)))
 """
+"""
+for i in range(durée):
+    print((sum(C[c,i].x for c in biomasse) / sum(C[c,i].x for c in combustible)*100),'%')
+    print(X1[i].x)
+    print(LinExpr.getValue(COU[i]))
+    print()
+"""   
