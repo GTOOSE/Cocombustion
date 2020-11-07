@@ -4,9 +4,14 @@ import pandas as pd
 
 
 model = Model('COCOmbustion')
-
+#CAPEX
 CF = 10050000          #cout fixe en euros O&M liés à la capacité de la centrale
 invest = 500000        # [e] prix du dédoublement de la capacité de stockage bois
+sech50 = 300000       # [e] prix séchage de 50kt
+sech150 = 600000      # [e] prix séchage de 150kt
+
+#CVariables
+coutbr = 12           # [e/t] cout de recyclage et de transport du bois recyclé
 
 eff = 0.38             # [kWhelec / kWh thermique] efficacité énergétique
 prod = 990000/eff      # [kWh thermique/an] énergie à produire par la centrale 
@@ -20,9 +25,9 @@ pcic= 25               # [GJ/t]
 spci=18-21*0.05       # [Mwh/t] PCI de la masse de biomasse séchée
 consobt = 0.025        # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
 consobb = 0.08         # [kWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
-#prix des dispositifs de séchage
-sech50 = 300000       # [e] prix séchage de 50kt
-sech150 = 600000      # [e] prix séchage de 150kt
+
+
+
 
 
 #                      [Mwh/t], [%],    [e/Mwh]               [t/an]       [kco2/t]    [km]
@@ -81,14 +86,6 @@ cout_vert=20*[0]
 dispo_rv=np.array([0,1000,7000,22000,29000,52000,57000,143000,210000,313000])
 prix_rv=np.array([0,4,7,10,16,25,31,46,61,76])
         
-        
-#------FONCTION DE PROFIT-----
-
-def profit(c):
-    return pci[c]*eff*vente[c] - achat[c]
-#profit après séchage de la biomasse avec un pci de 5% humidité (spci)
-def sprofit(c):
-    return (spci/3.6)*eff*vente[c] - achat[c]
 
 
 #------VARIABLES DECISIONNELLES RELLES-----
@@ -111,6 +108,16 @@ stock = model.addVar (lb = 0, vtype = GRB.BINARY)
 quot = model.addVar (lb = 0, vtype = GRB.BINARY)
 #variable de masse séchée pour chaque année pour chaque combustible 
 nr = model.addVars (combustible,lb = 0, vtype = GRB.BINARY)  
+
+mbb = sum(C[c,i] for c in bois_brute for i in range(durée))
+mt = sum(C[c,i] for c in combustible for i in range(durée))
+#------FONCTION DE PROFIT-----
+
+def profit(c):
+    return pci[c]*eff*vente[c] - achat[c]
+#profit après séchage de la biomasse avec un pci de 5% humidité (spci)
+def sprofit(c):
+    return (spci/3.6)*eff*vente[c] - achat[c]
 
 #----VARIABLES APPROXIMATION LINEAIRE-----
 
@@ -189,9 +196,11 @@ model.setObjective(quot*sum(5*Quota[i] for i in range(durée))
                    #Calcul les pertes liées à l'autoconsommation électrique pour le broyage
                    -sum(consobt*C[c,i]*vente[c] for c in boistorrefie+bois_brute for i in range(durée)) 
                    
-                   #-sum(cout_vert[i] for i in range(durée))
+                   -sum(cout_vert[i] for i in range(durée))
                    
-                   - CF - stock*invest,GRB.MAXIMIZE)
+                   -12*(sum(C[c,i] for c in boisrecycle)) 
+                   
+                   CF - stock*invest,GRB.MAXIMIZE)
 
 model.optimize()
 
