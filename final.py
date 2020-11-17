@@ -6,14 +6,8 @@ import pandas as pd
 
 model = Model('COCOmbustion')
 
-#CAPEX
-CF = 10050000          #cout fixe en euros O&M liés à la capacité de la centrale
-invest = 500000        # [e] prix du dédoublement de la capacité de stockage bois
-sech50 = 300000       # [e] prix séchage de 50kt
-sech150 = 600000      # [e] prix séchage de 150kt
 
-#CVariables
-coutbr = 12           # [e/t] cout de recyclage et de transport du bois recyclé
+
 
 eff = 0.38             # [kWhelec / kWh thermique] efficacité énergétique
 prod = 990000/eff      # [kWh thermique/an] énergie à produire par la centrale 
@@ -22,14 +16,22 @@ durée = 20             # [ans]  durée d'exploitation
 pcibr = 18-21*0.05     # [GJ/t]  
 pcibf = 18-21*0.2      # [GJ/t]  
 pcibt = 18             # [GJ/t]  
-pcirv = 18-21*0.4     # [GJ/t]  
+pcirv = 18-21*0.4      # [GJ/t]  
 pcic= 25               # [GJ/t]  
-spci=18-21*0.05       # [Mwh/t] PCI de la masse de biomasse séchée
+spci=18-21*0.05        # [Mwh/t] PCI de la masse de biomasse séchée
 consobt = 0.025        # [MWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
 consobb = 0.08         # [MWh/t] Valeur de l'autoconso nécessaire au broyage du boisfrais
 
-
+#CAPEX
+CF = 10050000          #cout fixe en euros O&M liés à la capacité de la centrale
+invest = 500000        # [e] prix du dédoublement de la capacité de stockage bois
+sech50 = 300000       # [e] prix séchage de 50kt
+sech150 = 600000      # [e] prix séchage de 150kt
+cout_tremie = 1.2     # e/(t/an) en fonction des tonnes de biomasse non torréfiée
+#Couts Variables 
 CV = 67 * prod
+couts_bio_50 = 430/277 # e/MWH
+couts_bio = 215/ 277   # e/MWh
 
 
 #                      [Mwh/t], [%], [e/t],[e/MWh],               [t/an]       [tco2/t]    [km]
@@ -72,14 +74,7 @@ biomasse =    boisfrais+boisrecycle+boistorrefie+residuvert
 bois_brute =  boisfrais+boisrecycle+residuvert
 #Création liste des valeurs de quota (dépassement ou pas) calculés
 Quota=[]
-#Création d'une liste liée à la localisation de la biomasse
-nonregion=[]
-region=[]
-for c in boisfrais+boisrecycle+residuvert+charbon:
-    if (mer[c]+route[c])>= 400:
-        nonregion.append(c)
-    else :
-        region.append(c)
+
 #Listes des points e l'approximation linéaires des prix RV
 cout_vert=20*[0]
 dispo_rv=np.array([0,1000,7000,22000,29000,52000,57000,143000,210000,313000])
@@ -104,9 +99,10 @@ C = model.addVars (combustible, 20, lb =0, vtype= GRB.CONTINUOUS)
 S=model.addVars (sechage, 20, lb =0, vtype= GRB.CONTINUOUS)
 NS=model.addVars (sechage, 20, lb =0, vtype= GRB.CONTINUOUS)
 
-
+#Variable permettant de calculer les couts selon taux d'incorporation de la biomasse
 X1 = model.addVars (20,lb=0,vtype=GRB.BINARY)
 COU = model.addVars (20,lb=0,vtype=GRB.CONTINUOUS)
+
 #-------VARIABLES DECISIONNELLES BINAIRES -----
 #variables binaires d'achat de capacité de stockage modéré s50 ou grand s150
 s50 = model.addVars (20,lb = 0, vtype = GRB.INTEGER)
@@ -116,8 +112,9 @@ sec = model.addVars (20,lb = 0, vtype = GRB.BINARY)
 stock = model.addVar (lb = 0, vtype = GRB.BINARY)   
 #Vaut 1 si le carbone devient un bénéfice, 0 sinon. Inséré dans objectif
 quot = model.addVar (lb = 0, vtype = GRB.BINARY)
-#variable de masse séchée pour chaque année pour chaque combustible 
-nr = model.addVars (combustible,lb = 0, vtype = GRB.BINARY)  
+
+#variables binaires pour ajouter le cf lorsqu'on achète du bois torréfié
+cf_bt = model.addVars (boistorrefie, lb = 0, vtype = GRB.BINARY)
 
 #------FONCTION DE PROFIT-----
 
@@ -125,7 +122,7 @@ def profit(c):
     return pci[c]*eff*vente[c] - achat[c]
 #profit après séchage de la biomasse avec un pci de 5% humidité (spci)
 def sprofit(c):
-    return (spci/3.6)*eff*vente[c] - achat[c]
+    return (spci/3.6)*eff*vente[c] - eau[c]*achat[c]
 
 #----VARIABLES APPROXIMATION LINEAIRE-----
 
@@ -142,7 +139,7 @@ prix_total_rv=dispo_rv*prix_rv
 
 for i in range(durée):
     model.addConstr(sum(C[c,i] for c in biomasse) <= 0.5*sum(C[c,i] for c in charbon+boistorrefie+boisrecycle+residuvert+boisfrais)*(1+X1[i]))
-    COU[i] = ((430/277) *(X1[i]) + (215/277)*(1-X1[i]))
+    COU[i] = ((couts_bio_50) *(X1[i]) + (couts_bio)*(1-X1[i]))
     
 #-----séchage
 for i in range(durée):
@@ -153,8 +150,7 @@ for i in range(durée):
     #je veux que la masse séchée, plus le poids d'eau perdu, plus la masse non séchée soit égale a la masse achetée
     ## CHANGER NS par C-S*(1-eau)
         model.addConstr(eau[c]*S[c,i]+NS[c,i]  == C[c,i] )
-    if i < 10: 
-        model.addConstr(s50[i]+s150[i] ==0)
+        
 #Pas plus de 5 séchoirs, de quelconque capacité
 model.addConstr(sum(s50[i]+s150[i] for i in range(durée)) <= 5)
 
@@ -162,18 +158,9 @@ for i in range(durée):
     #Assure la production énergétique pour chaque année i
     model.addConstr(sum(pci[c]*C[c,i]  for c in combustible)-sum(pci[c]*eau[c]*S[c,i] for c in sechage)+sum((spci/3.6)*S[c,i] for c in sechage) == prod)
     #Assure les 10% de charbon pour chaque année i 
-    model.addConstr((1-ratiocmin)*(sum(C[c,i] for c in charbon))-(ratiocmin*(sum(C[c,i] for c in boisfrais)+sum(C[c,i] for c in boisrecycle)+sum(C[c,i] for c in boistorrefie)+sum(C[c,i] for c in residuvert)))  >= 0)
+    model.addConstr((1-ratiocmin)*(sum(C[c,i] for c in charbon))-(ratiocmin*(sum(C[c,i] for c in boisfrais+boisrecycle+boistorrefie+residuvert))) >= 0)
     #Assure le stockage pour chaque jour i/365
     model.addConstr((sum(C[c,i] for c in bois_brute))<= 1500*365*(1+stock))
-
-    #Avant 10 ans on peut jusqu'a 60% de region, et apres 100% région
-    if i < 10:
-            #je veux 60% de R sur l'ensemble de la biomasse soit R/C = 0,6 donc R - 0,6C = 0
-            model.addConstr((sum(C[c,i] for c in region))  >= 0.6*(sum(C[c,i] for c in biomasse)))
-    if i >= 10:
-           model.addConstr((sum(C[c,i] for c in region))  >= (sum(C[c,i] for c in biomasse)))
-
-    model.addConstr((sum(C[c,i] for c in region))+(sum(C[c,i] for c in nonregion))==(sum(C[c,i] for c in region+nonregion)))
 
 
     #valeur de disponibilité
@@ -185,13 +172,13 @@ for i in range(durée):
 
     #GES
     if i <5:
-        Quota.append(80000-ges_route_total_rv[i]-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
+        Quota.append(80000-ges_route_total_rv[i]-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.00016*C[c,i] for c in boisfrais)-quicksum(route[c]*0.00009*C[c,i] for c in boistorrefie)-quicksum(mer[c]*0.000015*C[c,i] for c in combustible))
     elif i >=5 and i <10:
-        Quota.append(60000-ges_route_total_rv[i]-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
+        Quota.append(60000-ges_route_total_rv[i]-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.00016*C[c,i] for c in boisfrais)-quicksum(route[c]*0.00009*C[c,i] for c in boistorrefie)-quicksum(mer[c]*0.000015*C[c,i] for c in combustible))
     elif i >=10 and i <15:
-        Quota.append(40000-ges_route_total_rv[i]-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))                                                             
+        Quota.append(40000-ges_route_total_rv[i]-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.00016*C[c,i] for c in boisfrais)-quicksum(route[c]*0.00009*C[c,i] for c in boistorrefie)-quicksum(mer[c]*0.000015*C[c,i] for c in combustible))                                                             
     elif i >=15 :
-        Quota.append(20000-ges_route_total_rv[i]-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.016 for c in combustible)-quicksum(mer[c]*0.017 for c in combustible))
+        Quota.append(20000-ges_route_total_rv[i]-quicksum(ges[c]*C[c,i] for c in combustible)-quicksum(route[c]*0.00016*C[c,i] for c in boisfrais)-quicksum(route[c]*0.00009*C[c,i] for c in boistorrefie)-quicksum(mer[c]*0.000015*C[c,i] for c in combustible))
         #rajouter variabile binaire pour si pas de benef on le fait pas
 
         #Modélisation de la fonction linéaire par morceaux du prix des résidus verts
@@ -204,26 +191,48 @@ for i in range(durée):
     model.addConstr(quicksum(lambda_route_rv[j,i] for j in range(10))==1)
     model.addConstr(C['rv1',i]==quicksum(dispo_rv[j]*lambda_route_rv[j,i] for j in range(10)))
     ges_route_total_rv[i]=quicksum(ges_rv[j]*lambda_route_rv[j,i] for j in range(10))
+    
+    # si on achète du bois torréfié
+    for c in boistorrefie:
+        model.addConstr(sum(C[c,i] for i in range(durée)) == sum(C[c,i]*(cf_bt[c]) for i in range(durée)))
+    
+"""
+    #Avant 10 ans on peut jusqu'a 60% de region, et apres 100% région
+    if i < 10:
+            #je veux 60% de R sur l'ensemble de la biomasse soit R/C = 0,6 donc R - 0,6C = 0
+            model.addConstr((sum(C[c,i] for c in region))  >= 0.6*(sum(C[c,i] for c in biomasse)))
+    if i >= 10:
+           model.addConstr((sum(C[c,i] for c in region))  >= (sum(C[c,i] for c in biomasse)))
+
+    model.addConstr((sum(C[c,i] for c in region))+(sum(C[c,i] for c in nonregion))==(sum(C[c,i] for c in region+nonregion)))
+"""
 
 benef1 = sum(profit(c)*C[c,i]  for c in combustible for i in range(durée))
 benef2 = (sum(profit(c)*(NS[c,i]-C[c,i])+S[c,i]*sprofit(c)   for c in sechage for i in range(durée)))
 benef3 = (sum(s50[i]*sech50 + s150[i]*sech150 for i in range(20)))
 benef4 = quot*sum(5*Quota[i] for i in range(durée))
 
+
+
 model.setObjective(benef1 +benef2 - benef3 + benef4
 
                    #Calcul les pertes liées à l'autoconsommation électrique pour le broyage
-                   -sum(consobt*C[c,i]*vente[c] for c in boistorrefie for i in range(durée)) 
-                   -sum(consobb*C[c,i]*vente[c] for c in bois_brute for i in range(durée)) 
+                   - sum(consobt*C[c,i]*vente[c] for c in boistorrefie for i in range(durée)) 
+                   - sum(consobb*C[c,i]*vente[c] for c in bois_brute for i in range(durée)) 
 
-                   -sum(cout_vert[i] for i in range(durée))
+                   - sum(cout_vert[i] for i in range(durée))
                       
                    - CV 
                    
-                   -sum(COU[i] for i in range(durée))
+                   - sum(COU[i] for i in range(durée))
+                   
+                   - sum(C[c,i]*(cf_bt[c]) for c in boistorrefie)
+                   
+                   - sum(cout_tremie*C[c,i] for c in bois_brute for i in range (durée))
 
-                  - CF - stock*invest,GRB.MAXIMIZE)
+                   - CF - stock*invest,GRB.MAXIMIZE)
 
+model.write("final.lp")
 model.optimize()
 
 print('------OPTI ECONOMIQUE ---------')
@@ -264,11 +273,11 @@ for i in range(durée):
     duree.append(i+1)
 df = df = pd.DataFrame(data=data,index=duree,columns=comb)
 print(df)
-
+"""
 #-------AFFICHE LES MASSES DE COMBUSTIBLES ACHETEES ----
 for c in combustible:
     print(c, int((sum(C[c,i].x for i in range(20)))/1000),"Kt")
-
+"""
 #------ TEST CALCUL DU QUOTA -----
 quota=[]    
 for i in range(20):
@@ -324,6 +333,8 @@ print('Capacité de séchage : ',(LinExpr.getValue(sum(s50[i]*50000+s150[i]*1500
 #-----AFFICHAGE CAPACITE DE STOCKAGE------
 if stock.x>=1:
     print('Investissement dans le stockage de bois : Oui')
+else:
+    print('Pas d investissement dans les capacité de stockage journalières')
 """
 # TEST AFFICHAGE LAMBDA
 for i in range(20):
@@ -333,4 +344,6 @@ for i in range(20):
 for i in range(20):
     print(LinExpr.getValue(ges_route_total_rv[i]))
 """
+"""
 print(sum(C[c,i].x/1000 for c in boistorrefie+bois_brute for i in range(1)))
+"""
