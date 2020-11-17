@@ -13,6 +13,7 @@ eff = 0.38             # [kWhelec / kWh thermique] efficacité énergétique
 prod = 990000/eff      # [kWh thermique/an] énergie à produire par la centrale 
 ratiocmin = 0.1        # ratio carbone dans le LFC
 durée = 20             # [ans]  durée d'exploitation
+cout_tremie = 1.2     # e/(t/an) en fonction des tonnes de biomasse non torréfiée
 pcibr = 18-21*0.05     # [GJ/t]  
 pcibf = 18-21*0.2      # [GJ/t]  
 pcibt = 18             # [GJ/t]  
@@ -230,6 +231,8 @@ model.setObjective(benef1 +benef2 - benef3 + benef4
                    
                    - sum(cout_tremie*C[c,i] for c in bois_brute for i in range (durée))
 
+                   - sum(cout_tremie*C[c,i] for c in bois_brute for i in range (durée))
+                   
                    - CF - stock*invest,GRB.MAXIMIZE)
 
 model.write("final.lp")
